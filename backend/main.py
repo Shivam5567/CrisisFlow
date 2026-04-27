@@ -67,7 +67,10 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    await connect_db()
+    try:
+        await connect_db()
+    except Exception as e:
+        logger.warning("MongoDB unavailable at startup (%s) — running in degraded mode", e)
     asyncio.create_task(expiry_checker())
 
 
@@ -123,7 +126,7 @@ async def expiry_checker():
                 {"$set": {"status": "Expired"}},
             )
             if result.modified_count:
-                logger.info(f"⏰  Expired {result.modified_count} resource(s).")
+                logger.info("Expiry checker: expired %d resource(s)", result.modified_count)
                 await manager.broadcast({"event": "resources_expired", "count": result.modified_count})
         except Exception as e:
             logger.error(f"Expiry checker error: {e}")
@@ -350,19 +353,30 @@ async def get_surge_zones():
 @app.websocket("/ws/resources")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
-    logger.info(f"WS client connected. Total: {len(manager.active)}")
+    logger.info("WS client connected. Total: %d", len(manager.active))
     try:
-        # Send current active resources on connect
-        col  = get_resources_collection()
-        docs = await col.find({"status": "Active"}).to_list(200)
-        payload = [_fix_id(d) for d in docs]
+        # Send current active resources on connect (graceful if DB unavailable)
+        try:
+            col  = get_resources_collection()
+            docs = await col.find({"status": "Active"}).to_list(200)
+            payload = [_fix_id(d) for d in docs]
+        except Exception as db_err:
+            logger.warning("WS init DB error (MongoDB down?): %s", db_err)
+            payload = []
+
         await ws.send_text(json.dumps({"event": "init", "resources": payload}, default=str))
 
         while True:
-            await ws.receive_text()   # keep-alive / heartbeat
+            await ws.receive_text()   # keep-alive / heartbeat ping
     except WebSocketDisconnect:
         manager.disconnect(ws)
-        logger.info(f"WS client disconnected. Total: {len(manager.active)}")
+        logger.info("WS client disconnected. Total: %d", len(manager.active))
+    except Exception as e:
+        logger.error("WS unexpected error: %s", e)
+        try:
+            manager.disconnect(ws)
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────
