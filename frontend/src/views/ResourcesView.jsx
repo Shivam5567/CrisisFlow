@@ -22,14 +22,11 @@ function QRPanel({ resource, onClose }) {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
   const [copied,   setCopied]   = useState(false)
-  const [verHash,  setVerHash]  = useState('')
-  const [verMsg,   setVerMsg]   = useState(null)
-  const [verLoading,setVerLoading] = useState(false)
 
   async function generate() {
-    setLoading(true); setError('')
+    setLoading(true)
     try {
-      const r = await generateQR({ resource_id: resource.id, claimer_id: 'volunteer' })
+      const r = await generateQR({ resource_id: resource.id })
       setQrHash(r.data.qr_hash)
     } catch (e) {
       setError(e.response?.data?.detail ?? 'Failed to generate QR')
@@ -87,26 +84,6 @@ function QRPanel({ resource, onClose }) {
             {copied ? <><Check size={13} color="#22c55e"/> Copied!</> : <><Copy size={13}/> Copy Hash</>}
           </button>
 
-          {/* Inline verify */}
-          <div style={{ borderTop:'1px solid rgba(255,255,255,0.05)', paddingTop:10 }}>
-            <div style={{ fontSize:'0.75rem', color:'#64748b', marginBottom:6 }}>Verify & claim:</div>
-            <div style={{ display:'flex', gap:6 }}>
-              <input className="input" style={{ flex:1, fontSize:'0.75rem' }}
-                placeholder="Paste QR hash to verify…"
-                value={verHash} onChange={e => setVerHash(e.target.value)} />
-              <button className="btn" style={{ background:'#22c55e', color:'#fff', whiteSpace:'nowrap' }}
-                onClick={verify} disabled={verLoading}>
-                {verLoading ? '…' : <CheckCircle2 size={14}/>}
-              </button>
-            </div>
-            {verMsg && (
-              <div style={{ marginTop:6, padding:'6px 10px', borderRadius:6, fontSize:'0.78rem',
-                background: verMsg.ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                color: verMsg.ok ? '#22c55e' : '#ef4444', display:'flex', gap:6, alignItems:'center' }}>
-                {verMsg.ok ? <CheckCircle2 size={13}/> : <AlertCircle size={13}/>} {verMsg.text}
-              </div>
-            )}
-          </div>
         </>
       )}
       <button className="btn btn-ghost" style={{ width:'100%', fontSize:'0.75rem' }} onClick={onClose}>

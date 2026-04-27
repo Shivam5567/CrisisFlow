@@ -188,6 +188,7 @@ class HelpRequestResponse(HelpRequestCreate):
 
 class QRGenerateRequest(BaseModel):
     resource_id: str
+    claimer_id:  str   # seeker_id or volunteer_id
 
 
 class QRVerifyRequest(BaseModel):
