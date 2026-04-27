@@ -246,6 +246,43 @@ async def get_request(request_id: str):
     return _fix_id(doc)
 
 
+@app.patch("/api/requests/{request_id}/assign", tags=["Requests"])
+async def assign_request(request_id: str, volunteer_id: str = "volunteer"):
+    """Volunteer accepts an open help request."""
+    col = get_requests_collection()
+    doc = await col.find_one({"_id": ObjectId(request_id)})
+    if not doc:
+        raise HTTPException(404, "Request not found")
+    if doc["status"] != "Open":
+        raise HTTPException(400, f"Request is already {doc['status']}")
+
+    await col.update_one(
+        {"_id": ObjectId(request_id)},
+        {"$set": {"status": "Assigned", "assigned_to": volunteer_id}},
+    )
+    await manager.broadcast({
+        "event": "request_assigned",
+        "request_id": request_id,
+        "volunteer_id": volunteer_id,
+    })
+    return {"message": "Request accepted", "request_id": request_id}
+
+
+@app.patch("/api/requests/{request_id}/fulfill", tags=["Requests"])
+async def fulfill_request(request_id: str):
+    """Mark a request as fulfilled after delivery."""
+    col = get_requests_collection()
+    doc = await col.find_one({"_id": ObjectId(request_id)})
+    if not doc:
+        raise HTTPException(404, "Request not found")
+    await col.update_one(
+        {"_id": ObjectId(request_id)},
+        {"$set": {"status": "Fulfilled"}},
+    )
+    await manager.broadcast({"event": "request_fulfilled", "request_id": request_id})
+    return {"message": "Request marked fulfilled", "request_id": request_id}
+
+
 # ─────────────────────────────────────────────
 # ── QR / VERIFICATION ─────────────────────────
 # ─────────────────────────────────────────────
@@ -377,6 +414,82 @@ async def websocket_endpoint(ws: WebSocket):
             manager.disconnect(ws)
         except Exception:
             pass
+
+
+# ─────────────────────────────────────────────
+# ── ANALYTICS / STATS ─────────────────────────
+# ─────────────────────────────────────────────
+
+@app.get("/api/stats", tags=["Analytics"])
+async def get_stats():
+    """Aggregated counts for the analytics dashboard."""
+    r_col = get_resources_collection()
+    q_col = get_requests_collection()
+
+    try:
+        # Resource counts
+        r_active  = await r_col.count_documents({"status": "Active"})
+        r_claimed = await r_col.count_documents({"status": "Claimed"})
+        r_expired = await r_col.count_documents({"status": "Expired"})
+
+        r_food    = await r_col.count_documents({"status": "Active", "resource_type": "Food"})
+        r_medical = await r_col.count_documents({"status": "Active", "resource_type": "Medical"})
+        r_shelter = await r_col.count_documents({"status": "Active", "resource_type": "Shelter"})
+
+        # Request counts
+        q_open      = await q_col.count_documents({"status": "Open"})
+        q_assigned  = await q_col.count_documents({"status": "Assigned"})
+        q_fulfilled = await q_col.count_documents({"status": "Fulfilled"})
+
+        q_critical = await q_col.count_documents({"urgency": "Critical"})
+        q_high     = await q_col.count_documents({"urgency": "High"})
+        q_normal   = await q_col.count_documents({"urgency": "Normal"})
+        q_low      = await q_col.count_documents({"urgency": "Low"})
+
+        # Claimed today
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        claimed_today = await r_col.count_documents({
+            "status": "Claimed",
+            "created_at": {"$gte": today_start},
+        })
+
+    except Exception:
+        # MongoDB unavailable — return zeroes
+        r_active = r_claimed = r_expired = 0
+        r_food = r_medical = r_shelter = 0
+        q_open = q_assigned = q_fulfilled = 0
+        q_critical = q_high = q_normal = q_low = 0
+        claimed_today = 0
+
+    return {
+        "resources": {
+            "active":  r_active,
+            "claimed": r_claimed,
+            "expired": r_expired,
+            "claimed_today": claimed_today,
+            "by_type": [
+                {"name": "Food",    "value": r_food},
+                {"name": "Medical", "value": r_medical},
+                {"name": "Shelter", "value": r_shelter},
+            ],
+            "by_status": [
+                {"name": "Active",  "value": r_active},
+                {"name": "Claimed", "value": r_claimed},
+                {"name": "Expired", "value": r_expired},
+            ],
+        },
+        "requests": {
+            "open":      q_open,
+            "assigned":  q_assigned,
+            "fulfilled": q_fulfilled,
+            "by_urgency": [
+                {"name": "Critical", "value": q_critical},
+                {"name": "High",     "value": q_high},
+                {"name": "Normal",   "value": q_normal},
+                {"name": "Low",      "value": q_low},
+            ],
+        },
+    }
 
 
 # ─────────────────────────────────────────────

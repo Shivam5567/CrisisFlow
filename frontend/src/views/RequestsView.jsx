@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { listRequests } from '../api'
-import { AlertCircle, Clock, RefreshCw, Utensils, Heart, Home } from 'lucide-react'
+import { listRequests, assignRequest, fulfillRequest } from '../api'
+import { AlertCircle, Clock, RefreshCw, Utensils, Heart, Home, CheckCircle2, UserCheck } from 'lucide-react'
 
 const TYPE_EMOJI = { Food:'🍱', Medical:'💊', Shelter:'🏠' }
 const URGENCY_STYLE = {
@@ -22,6 +22,7 @@ export default function RequestsView() {
   const [requests, setRequests] = useState([])
   const [filter,   setFilter]   = useState('Open')
   const [loading,  setLoading]  = useState(false)
+  const [actionLoading, setActionLoading] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -31,28 +32,59 @@ export default function RequestsView() {
 
   useEffect(() => { load() }, [filter])
 
+  async function handleAssign(id) {
+    setActionLoading(id)
+    try {
+      await assignRequest(id, 'demo-volunteer')
+      setRequests(prev => prev.filter(req => req.id !== id))
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleFulfill(id) {
+    setActionLoading(id)
+    try {
+      await fulfillRequest(id)
+      setRequests(prev => prev.filter(req => req.id !== id))
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   return (
     <div style={{ padding:24, maxWidth:1000, margin:'0 auto' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
           <h1 style={{ fontSize:'1.4rem', fontWeight:800 }}>Help Requests</h1>
-          <p style={{ color:'#64748b', marginTop:2, fontSize:'0.9rem' }}>{requests.length} active request{requests.length!==1?'s':''}</p>
+          <p style={{ color:'#64748b', marginTop:2, fontSize:'0.9rem' }}>{requests.length} {filter.toLowerCase()} request{requests.length!==1?'s':''}</p>
         </div>
         <button className="btn btn-ghost" onClick={load} disabled={loading}>
           <RefreshCw size={14} className={loading?'animate-spin-slow':''}/> Refresh
         </button>
       </div>
 
-      <div style={{ display:'flex', gap:8, marginBottom:20 }}>
-        {['Open','Assigned','Fulfilled'].map(s => (
-          <button key={s} onClick={() => setFilter(s)}
-            className="btn"
+      <div style={{ display:'flex', gap:0, marginBottom:20, border:'1px solid rgba(255,255,255,0.07)',
+        borderRadius:10, overflow:'hidden', width:'fit-content' }}>
+        {[
+          { val:'Open', emoji:'🔴' },
+          { val:'Assigned', emoji:'🔵' },
+          { val:'Fulfilled', emoji:'🟢' },
+        ].map(({ val, emoji }) => (
+          <button key={val} onClick={() => setFilter(val)}
             style={{
-              background: filter===s ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.04)',
-              color: filter===s ? '#ef4444' : '#64748b',
-              border: filter===s ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.07)',
+              padding:'9px 20px', cursor:'pointer', border:'none',
+              background: filter === val ? 'rgba(239,68,68,0.15)' : 'transparent',
+              color: filter === val ? '#ef4444' : '#64748b',
+              fontWeight: filter === val ? 700 : 500, fontSize:'0.85rem',
+              borderRight: '1px solid rgba(255,255,255,0.07)',
+              transition:'all 0.2s',
             }}>
-            {s}
+            {emoji} {val}
           </button>
         ))}
       </div>
@@ -92,13 +124,29 @@ export default function RequestsView() {
                 {req.description && (
                   <p style={{ fontSize:'0.82rem', color:'#94a3b8', marginBottom:8, lineHeight:1.45 }}>{req.description}</p>
                 )}
-                <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:'0.72rem', color:'#475569', fontFamily:'JetBrains Mono,monospace' }}>
-                    📍 {req.location_coords.lat.toFixed(4)}, {req.location_coords.lng.toFixed(4)}
-                  </span>
-                  <span style={{ fontSize:'0.72rem', color:'#475569', display:'flex', alignItems:'center', gap:4 }}>
-                    <Clock size={11}/> {relTime(req.timestamp)}
-                  </span>
+                
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12, flexWrap:'wrap', gap:8 }}>
+                  <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'0.72rem', color:'#475569', fontFamily:'JetBrains Mono,monospace' }}>
+                      📍 {req.location_coords.lat.toFixed(4)}, {req.location_coords.lng.toFixed(4)}
+                    </span>
+                    <span style={{ fontSize:'0.72rem', color:'#475569', display:'flex', alignItems:'center', gap:4 }}>
+                      <Clock size={11}/> {relTime(req.timestamp)}
+                    </span>
+                  </div>
+                  
+                  {filter === 'Open' && (
+                    <button className="btn btn-primary" style={{ padding:'6px 14px', fontSize:'0.75rem' }}
+                      onClick={() => handleAssign(req.id)} disabled={actionLoading === req.id}>
+                      {actionLoading === req.id ? 'Accepting...' : <><UserCheck size={14}/> Accept Request</>}
+                    </button>
+                  )}
+                  {filter === 'Assigned' && (
+                    <button className="btn" style={{ background:'#22c55e', color:'#fff', padding:'6px 14px', fontSize:'0.75rem' }}
+                      onClick={() => handleFulfill(req.id)} disabled={actionLoading === req.id}>
+                      {actionLoading === req.id ? 'Updating...' : <><CheckCircle2 size={14}/> Mark Fulfilled</>}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, AlertCircle, Utensils, Heart, Home } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, AlertCircle, Utensils, Heart, Home, Crosshair } from 'lucide-react'
 import { createRequest } from '../api'
 import LocationPickerMap from './LocationPickerMap'
 
@@ -22,6 +22,24 @@ export default function RequestHelpModal({ onClose, onSuccess, userLocation }) {
   })
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
+  const [geoLoading, setGeoLoading] = useState(false)
+
+  useEffect(() => {
+    if (!userLocation) requestGeo()
+  }, [])
+
+  function requestGeo() {
+    if (!navigator.geolocation) return
+    setGeoLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setForm(p => ({ ...p, lat: parseFloat(coords.latitude.toFixed(6)), lng: parseFloat(coords.longitude.toFixed(6)) }))
+        setGeoLoading(false)
+      },
+      () => setGeoLoading(false),
+      { timeout: 8000 }
+    )
+  }
 
   function set(field, val) { setForm(p => ({ ...p, [field]: val })) }
   function handleMapPick(lat, lng) { setForm(p => ({ ...p, lat, lng })) }
@@ -116,9 +134,21 @@ export default function RequestHelpModal({ onClose, onSuccess, userLocation }) {
 
           {/* ── Location Picker Map ── */}
           <div>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, marginBottom: 6, display: 'block' }}>
-              📍 Your Location — click the map to pin where you are
-            </label>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>
+                📍 Your Location — click map to pin where you are
+              </label>
+              <button type="button" onClick={requestGeo}
+                style={{
+                  display:'flex', alignItems:'center', gap:4, fontSize:'0.72rem',
+                  background: geoLoading ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.06)',
+                  color: geoLoading ? '#3b82f6' : '#94a3b8',
+                  border:'1px solid rgba(255,255,255,0.1)', borderRadius:6,
+                  padding:'4px 10px', cursor:'pointer', transition:'all 0.2s',
+                }}>
+                <Crosshair size={11}/> {geoLoading ? 'Locating…' : 'Use My Location'}
+              </button>
+            </div>
             <LocationPickerMap
               lat={form.lat} lng={form.lng}
               onPick={handleMapPick}

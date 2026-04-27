@@ -8,6 +8,7 @@ import RequestHelpModal  from './components/RequestHelpModal'
 import ResourcesView     from './views/ResourcesView'
 import RequestsView      from './views/RequestsView'
 import QRView            from './views/QRView'
+import DashboardView     from './views/DashboardView'
 import { Plus, AlertCircle } from 'lucide-react'
 
 function Dashboard() {
@@ -46,6 +47,7 @@ function Dashboard() {
       {/* Main content area */}
       <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
         <main style={{ flex:1, overflow:'auto', position:'relative' }}>
+          {view === 'dashboard' && <DashboardView />}
           {view === 'map' && (
             <LiveMap
               resources={resources}

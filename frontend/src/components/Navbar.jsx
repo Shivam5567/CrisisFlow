@@ -7,6 +7,7 @@ export default function Navbar({ activeView, setActiveView }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const navItems = [
+    { id: 'dashboard', label: 'Dashboard'  },
     { id: 'map',       label: 'Live Map'   },
     { id: 'resources', label: 'Resources'  },
     { id: 'requests',  label: 'Requests'   },
