@@ -29,9 +29,10 @@ from typing import List
 from bson import ObjectId
 from dotenv import load_dotenv
 from fastapi import (
-    FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+    FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Depends
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 
 from database import connect_db, close_db, get_resources_collection, get_requests_collection, get_users_collection
 from models import (
@@ -39,7 +40,10 @@ from models import (
     QRGenerateRequest, QRVerifyRequest,
     ResourceCreate, ResourceResponse,
     SurgeZone, LocationCoords,
-    UserCreate, UserResponse,
+    UserCreate, UserResponse, UserRole, UserDB, Token
+)
+from auth import (
+    get_password_hash, verify_password, create_access_token, get_current_user, require_role
 )
 
 load_dotenv()
@@ -148,14 +152,44 @@ def _fix_id(doc: dict) -> dict:
 # ── USERS ────────────────────────────────────
 # ─────────────────────────────────────────────
 
-@app.post("/api/users", response_model=UserResponse, status_code=201, tags=["Users"])
-async def create_user(payload: UserCreate):
-    col  = get_users_collection()
-    doc  = payload.model_dump()
+# ─────────────────────────────────────────────
+# ── AUTH & USERS ─────────────────────────────
+# ─────────────────────────────────────────────
+
+@app.post("/api/auth/register", response_model=Token, status_code=201, tags=["Auth"])
+async def register(payload: UserCreate):
+    col = get_users_collection()
+    if await col.find_one({"email": payload.email}):
+        raise HTTPException(400, "Email already registered")
+    
+    doc = payload.model_dump()
+    password = doc.pop("password")
+    doc["password_hash"] = get_password_hash(password)
     doc["created_at"] = datetime.utcnow()
-    res  = await col.insert_one(doc)
-    doc["id"] = str(res.inserted_id)
-    return doc
+    
+    res = await col.insert_one(doc)
+    user_id = str(res.inserted_id)
+    
+    access_token = create_access_token(data={"sub": user_id, "role": payload.role})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/api/auth/login", response_model=Token, tags=["Auth"])
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    col = get_users_collection()
+    user_doc = await col.find_one({"email": form_data.username})
+    if not user_doc or not verify_password(form_data.password, user_doc["password_hash"]):
+        raise HTTPException(401, "Incorrect email or password")
+        
+    user_id = str(user_doc["_id"])
+    role = user_doc["role"]
+    access_token = create_access_token(data={"sub": user_id, "role": role})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/users/me", response_model=UserResponse, tags=["Users"])
+async def get_users_me(current_user: UserDB = Depends(get_current_user)):
+    return _fix_id(current_user.model_dump(by_alias=True))
 
 
 @app.get("/api/users/{user_id}", response_model=UserResponse, tags=["Users"])
@@ -172,9 +206,11 @@ async def get_user(user_id: str):
 # ─────────────────────────────────────────────
 
 @app.post("/api/resources", response_model=ResourceResponse, status_code=201, tags=["Resources"])
-async def create_resource(payload: ResourceCreate):
+async def create_resource(payload: ResourceCreate, current_user: UserDB = Depends(require_role([UserRole.provider]))):
     col  = get_resources_collection()
     doc  = payload.model_dump()
+    doc["provider_id"] = str(current_user.id)
+    doc["provider_name"] = current_user.name
     doc["status"]     = "Active"
     doc["qr_hash"]    = None
     doc["claimed_by"] = None
@@ -217,9 +253,11 @@ async def delete_resource(resource_id: str):
 # ─────────────────────────────────────────────
 
 @app.post("/api/requests", response_model=HelpRequestResponse, status_code=201, tags=["Requests"])
-async def create_request(payload: HelpRequestCreate):
+async def create_request(payload: HelpRequestCreate, current_user: UserDB = Depends(require_role([UserRole.seeker]))):
     col  = get_requests_collection()
     doc  = payload.model_dump()
+    doc["seeker_id"] = str(current_user.id)
+    doc["seeker_name"] = current_user.name
     doc["status"]      = "Open"
     doc["timestamp"]   = datetime.utcnow()
     doc["assigned_to"] = None
@@ -247,7 +285,7 @@ async def get_request(request_id: str):
 
 
 @app.patch("/api/requests/{request_id}/assign", tags=["Requests"])
-async def assign_request(request_id: str, volunteer_id: str = "volunteer"):
+async def assign_request(request_id: str, current_user: UserDB = Depends(require_role([UserRole.volunteer]))):
     """Volunteer accepts an open help request."""
     col = get_requests_collection()
     doc = await col.find_one({"_id": ObjectId(request_id)})
@@ -258,18 +296,18 @@ async def assign_request(request_id: str, volunteer_id: str = "volunteer"):
 
     await col.update_one(
         {"_id": ObjectId(request_id)},
-        {"$set": {"status": "Assigned", "assigned_to": volunteer_id}},
+        {"$set": {"status": "Assigned", "assigned_to": str(current_user.id)}},
     )
     await manager.broadcast({
         "event": "request_assigned",
         "request_id": request_id,
-        "volunteer_id": volunteer_id,
+        "volunteer_id": str(current_user.id),
     })
     return {"message": "Request accepted", "request_id": request_id}
 
 
 @app.patch("/api/requests/{request_id}/fulfill", tags=["Requests"])
-async def fulfill_request(request_id: str):
+async def fulfill_request(request_id: str, current_user: UserDB = Depends(require_role([UserRole.volunteer]))):
     """Mark a request as fulfilled after delivery."""
     col = get_requests_collection()
     doc = await col.find_one({"_id": ObjectId(request_id)})
@@ -288,13 +326,15 @@ async def fulfill_request(request_id: str):
 # ─────────────────────────────────────────────
 
 @app.post("/api/qr/generate", tags=["QR"])
-async def generate_qr(payload: QRGenerateRequest):
+async def generate_qr(payload: QRGenerateRequest, current_user: UserDB = Depends(require_role([UserRole.provider]))):
     col = get_resources_collection()
     doc = await col.find_one({"_id": ObjectId(payload.resource_id)})
     if not doc:
         raise HTTPException(404, "Resource not found")
     if doc["status"] != "Active":
         raise HTTPException(400, f"Resource is {doc['status']} — cannot generate QR")
+    if doc.get("provider_id") != str(current_user.id):
+        raise HTTPException(403, "You can only generate QR codes for your own resources")
 
     raw      = f"{payload.resource_id}:{payload.claimer_id}:{secrets.token_hex(16)}"
     qr_hash  = hashlib.sha256(raw.encode()).hexdigest()
@@ -307,7 +347,7 @@ async def generate_qr(payload: QRGenerateRequest):
 
 
 @app.post("/api/qr/verify", tags=["QR"])
-async def verify_qr(payload: QRVerifyRequest):
+async def verify_qr(payload: QRVerifyRequest, current_user: UserDB = Depends(require_role([UserRole.volunteer]))):
     col = get_resources_collection()
     doc = await col.find_one({"qr_hash": payload.qr_hash})
     if not doc:
@@ -319,7 +359,7 @@ async def verify_qr(payload: QRVerifyRequest):
 
     await col.update_one(
         {"_id": doc["_id"]},
-        {"$set": {"status": "Claimed"}},
+        {"$set": {"status": "Claimed", "claimed_by": str(current_user.id)}},
     )
     await manager.broadcast({"event": "resource_claimed", "resource_id": str(doc["_id"])})
     return {"message": "Resource successfully claimed", "resource_id": str(doc["_id"])}

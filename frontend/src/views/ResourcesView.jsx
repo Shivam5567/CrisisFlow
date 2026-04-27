@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { listResources, deleteResource, generateQR } from '../api'
 import { Clock, Trash2, RefreshCw, QrCode, Copy, Check, CheckCircle2, AlertCircle } from 'lucide-react'
-import QRCode from 'react-qr-code'
+import { QRCodeSVG as QRCode } from 'qrcode.react'
 
 const TYPE_EMOJI = { Food:'🍱', Medical:'💊', Shelter:'🏠' }
 const TYPE_COLOR = { Food:'#f97316', Medical:'#22c55e', Shelter:'#3b82f6' }
@@ -116,8 +117,9 @@ function QRPanel({ resource, onClose }) {
 }
 
 export default function ResourcesView() {
-  const [resources,  setResources]  = useState([])
-  const [filter,     setFilter]     = useState('Active')
+  const { user } = useAuth()
+  const [resources, setResources] = useState([])
+  const [filter, setFilter] = useState('Active')
   const [typeFilter, setTypeFilter] = useState('All')
   const [loading,    setLoading]    = useState(false)
   const [deleting,   setDeleting]   = useState(null)
@@ -253,7 +255,7 @@ export default function ResourcesView() {
               </div>
 
               {/* Action buttons */}
-              {r.status === 'Active' && (
+              {r.status === 'Active' && user?.id === r.provider_id && (
                 <div style={{ display:'flex', gap:8 }}>
                   <button className="btn"
                     style={{

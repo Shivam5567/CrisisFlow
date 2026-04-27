@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import QRCode from 'react-qr-code'
+import { QRCodeSVG as QRCode } from 'qrcode.react'
 import { generateQR, verifyQR } from '../api'
 import { Scan, QrCode, CheckCircle2, AlertCircle, Copy, Check } from 'lucide-react'
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { WSProvider, useWS } from './context/WSContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import Navbar            from './components/Navbar'
 import LiveFeed          from './components/LiveFeed'
 import LiveMap           from './components/LiveMap'
@@ -12,7 +13,8 @@ import DashboardView     from './views/DashboardView'
 import { Plus, AlertCircle } from 'lucide-react'
 
 function Dashboard() {
-  const { resources, setResources } = useWS()
+  const { resources } = useWS()
+  const { user } = useAuth()
   const [view,           setView]           = useState('map')
   const [showAddRes,     setShowAddRes]     = useState(false)
   const [showReqHelp,    setShowReqHelp]    = useState(false)
@@ -24,24 +26,28 @@ function Dashboard() {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' }}>
       <Navbar activeView={view} setActiveView={setView} />
 
-      {/* FABs – always visible */}
+      {/* FABs – always visible, restricted by role */}
       <div style={{
         position:'fixed', bottom:28, right:isMapView ? 320 : 28,
         zIndex:500, display:'flex', flexDirection:'column', gap:10,
         transition:'right 0.3s ease',
       }}>
-        <button className="btn btn-primary"
-          style={{ borderRadius:'999px', padding:'12px 20px',
-            boxShadow:'0 4px 20px rgba(249,115,22,0.4)', fontSize:'0.85rem' }}
-          onClick={() => setShowAddRes(true)}>
-          <Plus size={16}/> Add Resource
-        </button>
-        <button className="btn btn-danger"
-          style={{ borderRadius:'999px', padding:'12px 20px',
-            boxShadow:'0 4px 20px rgba(239,68,68,0.4)', fontSize:'0.85rem' }}
-          onClick={() => setShowReqHelp(true)}>
-          <AlertCircle size={16}/> Request Help
-        </button>
+        {user?.role === 'Provider' && (
+          <button className="btn btn-primary"
+            style={{ borderRadius:'999px', padding:'12px 20px',
+              boxShadow:'0 4px 20px rgba(249,115,22,0.4)', fontSize:'0.85rem' }}
+            onClick={() => setShowAddRes(true)}>
+            <Plus size={16}/> Add Resource
+          </button>
+        )}
+        {user?.role === 'Seeker' && (
+          <button className="btn btn-danger"
+            style={{ borderRadius:'999px', padding:'12px 20px',
+              boxShadow:'0 4px 20px rgba(239,68,68,0.4)', fontSize:'0.85rem' }}
+            onClick={() => setShowReqHelp(true)}>
+            <AlertCircle size={16}/> Request Help
+          </button>
+        )}
       </div>
 
       {/* Main content area */}
@@ -84,8 +90,10 @@ function Dashboard() {
 
 export default function App() {
   return (
-    <WSProvider>
-      <Dashboard />
-    </WSProvider>
+    <AuthProvider>
+      <WSProvider>
+        <Dashboard />
+      </WSProvider>
+    </AuthProvider>
   )
 }

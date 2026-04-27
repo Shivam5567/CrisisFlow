@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { listRequests, assignRequest, fulfillRequest } from '../api'
 import { AlertCircle, Clock, RefreshCw, Utensils, Heart, Home, CheckCircle2, UserCheck } from 'lucide-react'
 
@@ -19,6 +20,7 @@ function relTime(ts) {
 }
 
 export default function RequestsView() {
+  const { user } = useAuth()
   const [requests, setRequests] = useState([])
   const [filter,   setFilter]   = useState('Open')
   const [loading,  setLoading]  = useState(false)
@@ -134,14 +136,23 @@ export default function RequestsView() {
                       <Clock size={11}/> {relTime(req.timestamp)}
                     </span>
                   </div>
-                  
-                  {filter === 'Open' && (
+                  {user?.id === req.seeker_id && (
+                    <div style={{
+                      padding:'6px 12px', borderRadius:8, fontSize:'0.75rem', fontWeight:700,
+                      background: req.status === 'Open' ? 'rgba(234,179,8,0.1)' : req.status === 'Assigned' ? 'rgba(59,130,246,0.1)' : 'rgba(34,197,94,0.1)',
+                      color: req.status === 'Open' ? '#eab308' : req.status === 'Assigned' ? '#3b82f6' : '#22c55e'
+                    }}>
+                      {req.status === 'Open' ? '⏳ Finding volunteer...' : req.status === 'Assigned' ? '🚑 Help is on the way!' : '✅ Delivered!'}
+                    </div>
+                  )}
+
+                  {user?.role === 'Volunteer' && filter === 'Open' && (
                     <button className="btn btn-primary" style={{ padding:'6px 14px', fontSize:'0.75rem' }}
                       onClick={() => handleAssign(req.id)} disabled={actionLoading === req.id}>
                       {actionLoading === req.id ? 'Accepting...' : <><UserCheck size={14}/> Accept Request</>}
                     </button>
                   )}
-                  {filter === 'Assigned' && (
+                  {user?.role === 'Volunteer' && filter === 'Assigned' && (
                     <button className="btn" style={{ background:'#22c55e', color:'#fff', padding:'6px 14px', fontSize:'0.75rem' }}
                       onClick={() => handleFulfill(req.id)} disabled={actionLoading === req.id}>
                       {actionLoading === req.id ? 'Updating...' : <><CheckCircle2 size={14}/> Mark Fulfilled</>}

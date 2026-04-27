@@ -1,7 +1,5 @@
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-
 /* ─── Design tokens ─────────────────────────────────────── */
 :root {
   --bg-primary:   #0a0d14;
@@ -133,3 +131,16 @@ select.input option  { background: var(--bg-secondary); }
   background: rgba(239,68,68,0.3);
   animation: pulse-ring 2s ease-out infinite;
 }
+
+
+/* --- Responsive Nav --------------------------------------- */
+.desktop-nav { display: flex; gap: 4px; }
+.mobile-nav-toggle { display: none; }
+.desktop-profile-info { display: flex; flex-direction: column; align-items: flex-end; }
+
+@media (max-width: 850px) {
+  .desktop-nav { display: none !important; }
+  .mobile-nav-toggle { display: inline-flex !important; }
+  .desktop-profile-info { display: none !important; }
+}
+

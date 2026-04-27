@@ -2,8 +2,24 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
-// ── Users ──────────────────────────────────
-export const createUser   = (data) => api.post('/users', data)
+// Add a request interceptor to attach JWT token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('crisisflow_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+}, (error) => Promise.reject(error))
+
+// ── Auth & Users ───────────────────────────
+export const register     = (data) => api.post('/auth/register', data)
+export const login        = (data) => {
+  const formData = new URLSearchParams()
+  formData.append('username', data.email)
+  formData.append('password', data.password)
+  return api.post('/auth/login', formData)
+}
+export const getMe        = ()     => api.get('/users/me')
 export const getUser      = (id)   => api.get(`/users/${id}`)
 
 // ── Resources ──────────────────────────────
@@ -15,7 +31,7 @@ export const deleteResource = (id)     => api.delete(`/resources/${id}`)
 // ── Requests ───────────────────────────────
 export const createRequest   = (data)      => api.post('/requests', data)
 export const listRequests    = (status)    => api.get('/requests', { params: { status } })
-export const assignRequest   = (id, volId) => api.patch(`/requests/${id}/assign`, null, { params: { volunteer_id: volId } })
+export const assignRequest   = (id)        => api.patch(`/requests/${id}/assign`)
 export const fulfillRequest  = (id)        => api.patch(`/requests/${id}/fulfill`)
 
 // ── QR ─────────────────────────────────────

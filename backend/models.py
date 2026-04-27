@@ -77,22 +77,44 @@ class UserCreate(BaseModel):
     name:            str
     role:            UserRole
     location_coords: LocationCoords
-    email:           Optional[str] = None
+    email:           str
+    password:        str
     phone:           Optional[str] = None
 
 
-class UserDB(UserCreate):
-    id:         Optional[PyObjectId] = Field(default=None, alias="_id")
-    created_at: datetime             = Field(default_factory=datetime.utcnow)
+class UserDB(BaseModel):
+    id:              Optional[PyObjectId] = Field(default=None, alias="_id")
+    name:            str
+    role:            UserRole
+    location_coords: LocationCoords
+    email:           str
+    password_hash:   str
+    phone:           Optional[str] = None
+    created_at:      datetime = Field(default_factory=datetime.utcnow)
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
 
-class UserResponse(UserCreate):
-    id:         str
-    created_at: datetime
+class UserResponse(BaseModel):
+    id:              str
+    name:            str
+    role:            UserRole
+    location_coords: LocationCoords
+    email:           str
+    phone:           Optional[str] = None
+    created_at:      datetime
 
     model_config = {"populate_by_name": True}
+
+
+class UserLogin(BaseModel):
+    email:    str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type:   str
 
 
 # ──────────────────────────────────────────────
@@ -166,7 +188,6 @@ class HelpRequestResponse(HelpRequestCreate):
 
 class QRGenerateRequest(BaseModel):
     resource_id: str
-    claimer_id:  str   # seeker_id or volunteer_id
 
 
 class QRVerifyRequest(BaseModel):
